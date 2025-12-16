@@ -12,6 +12,45 @@
     </div>
 </div>
 
+<!-- Quick Actions Menu untuk Tengkulak (Admin) -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-lightning"></i> Menu Manajemen
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <a href="{{ route('admin.users.index') }}" class="btn btn-outline-primary w-100 py-3">
+                            <i class="bi bi-people"></i>
+                            <div class="small mt-2">Manajemen Pengguna</div>
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ route('admin.deliveries.index') }}" class="btn btn-outline-info w-100 py-3">
+                            <i class="bi bi-truck"></i>
+                            <div class="small mt-2">Manajemen Pengiriman</div>
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{{ route('penawaran.index') }}" class="btn btn-outline-success w-100 py-3">
+                            <i class="bi bi-box-seam"></i>
+                            <div class="small mt-2">Data Penawaran</div>
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="#" class="btn btn-outline-warning w-100 py-3" onclick="alert('Laporan - segera hadir'); return false;">
+                            <i class="bi bi-file-earmark-pdf"></i>
+                            <div class="small mt-2">Laporan</div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Filter Stock -->
 <div class="row">
     <div class="col-md-12">

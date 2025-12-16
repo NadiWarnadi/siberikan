@@ -2,6 +2,10 @@
 
 @section('title', 'Dashboard Tengkulak - SIBERIKAN')
 
+@section('head')
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+@endsection
+
 @section('content')
 <style>
     :root {
@@ -204,7 +208,43 @@
         </div>
     </div>
 
-    <!-- Nav Tabs -->
+    <!-- Analytics Row -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="bi bi-pie-chart"></i> Statistik Penawaran</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="penawaranChart" height="80"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="bi bi-clock-history"></i> Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <a href="{{ route('tengkulak.list-penawaran-pending') }}" class="btn btn-primary w-100 mb-2">
+                            <i class="bi bi-hourglass-split"></i> Review Penawaran Pending
+                        </a>
+                    </div>
+                    <div class="mb-3">
+                        <a href="{{ route('tengkulak.history-approved') }}" class="btn btn-success w-100 mb-2">
+                            <i class="bi bi-check-circle"></i> Lihat History Approved
+                        </a>
+                    </div>
+                    <div class="mb-3">
+                        <a href="{{ route('tengkulak.history-rejected') }}" class="btn btn-danger w-100">
+                            <i class="bi bi-x-circle"></i> Lihat History Rejected
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="card shadow mb-4">
         <div class="card-header bg-light">
             <ul class="nav nav-tabs" role="tablist">
@@ -271,53 +311,116 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Chart
+    initChart();
+
     // Load stats
     loadStats();
 
-    // Load penawarans
-    loadPenawarans();
-
-    // Tab switching
+    // Tab switching with Bootstrap
     document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
-        tab.addEventListener('click', function() {
+        tab.addEventListener('click', function(e) {
+            e.preventDefault();
+            const tabName = this.getAttribute('data-tab');
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelector('#' + this.getAttribute('data-tab')).classList.add('active');
+            document.getElementById(tabName).classList.add('active');
         });
     });
+
+    // Auto refresh stats every 30 seconds
+    setInterval(loadStats, 30000);
 });
+
+function initChart() {
+    const ctx = document.getElementById('penawaranChart');
+    if (!ctx) return;
+
+    const chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Pending', 'Approved', 'Rejected'],
+            datasets: [{
+                data: [0, 0, 0],
+                backgroundColor: [
+                    '#ffc107',  // warning (pending)
+                    '#28a745',  // success (approved)
+                    '#dc3545'   // danger (rejected)
+                ],
+                borderColor: '#fff',
+                borderWidth: 2,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 20,
+                        font: { size: 12, weight: 'bold' }
+                    }
+                }
+            }
+        }
+    });
+
+    window.penawaranChart = chart;
+}
 
 function loadStats() {
     fetch('{{ route("tengkulak.dashboard") }}?json=stats')
         .then(r => r.json())
         .then(data => {
-            document.getElementById('countPending').textContent = data.pending || 0;
-            document.getElementById('countApproved').textContent = data.approved || 0;
-            document.getElementById('countRejected').textContent = data.rejected || 0;
-            document.getElementById('countTotal').textContent = data.total || 0;
-            document.getElementById('badgePending').textContent = data.pending || 0;
-            document.getElementById('badgeApproved').textContent = data.approved || 0;
-            document.getElementById('badgeRejected').textContent = data.rejected || 0;
-        });
+            const pending = data.pending || 0;
+            const approved = data.approved || 0;
+            const rejected = data.rejected || 0;
+            const total = data.total || 0;
+
+            // Update stat cards with animation
+            animateNumber('countPending', pending);
+            animateNumber('countApproved', approved);
+            animateNumber('countRejected', rejected);
+            animateNumber('countTotal', total);
+
+            // Update badges
+            document.getElementById('badgePending').textContent = pending;
+            document.getElementById('badgeApproved').textContent = approved;
+            document.getElementById('badgeRejected').textContent = rejected;
+
+            // Update chart
+            if (window.penawaranChart) {
+                window.penawaranChart.data.datasets[0].data = [pending, approved, rejected];
+                window.penawaranChart.update();
+            }
+        })
+        .catch(err => console.error('Error loading stats:', err));
 }
 
-function loadPenawarans() {
-    fetch('{{ route("tengkulak.list-penawaran-pending") }}')
-        .then(r => r.text())
-        .then(html => {
-            // Parse dan display penawarans
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const penawaran = doc.querySelectorAll('[data-penawaran]');
-            
-            if (penawaran.length === 0) {
-                document.getElementById('pendingContainer').innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
-                        <p class="text-muted">Tidak ada penawaran pending</p>
-                    </div>
-                `;
-            }
-        });
+function animateNumber(elementId, target) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const current = parseInt(element.textContent) || 0;
+    if (current === target) return;
+
+    const increment = (target - current) / 20;
+    let counter = current;
+
+    const updateCounter = () => {
+        counter += increment;
+        if (increment > 0 && counter >= target) counter = target;
+        if (increment < 0 && counter <= target) counter = target;
+        
+        element.textContent = Math.floor(counter);
+        
+        if (counter !== target) {
+            requestAnimationFrame(updateCounter);
+        }
+    };
+
+    updateCounter();
 }
 
 function approvePenawaran(penawaranId) {
@@ -333,12 +436,19 @@ function approvePenawaran(penawaranId) {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            alert(data.message);
-            // Redirect to invoice
-            window.location.href = data.invoice_url;
+            alert('✓ ' + data.message);
+            if (data.invoice_url) {
+                window.location.href = data.invoice_url;
+            } else {
+                location.reload();
+            }
         } else {
-            alert('Error: ' + data.error);
+            alert('✗ Error: ' + (data.error || 'Unknown error'));
         }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Error: ' + err.message);
     });
 }
 
@@ -363,12 +473,36 @@ function rejectPenawaran(penawaranId) {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            alert(data.message);
+            alert('✓ ' + data.message);
             location.reload();
         } else {
-            alert('Error: ' + data.error);
+            alert('✗ Error: ' + (data.error || 'Unknown error'));
         }
+    })
+    .catch(err => {
+        console.error(err);
+        alert('Error: ' + err.message);
     });
 }
+
+function updateChart(pending, approved, rejected) {
+    const ctx = document.getElementById('penawaranChart');
+    if (!ctx) return;
+
+    const chart = Chart.getChart(ctx);
+    if (chart) {
+        chart.data.datasets[0].data = [pending, approved, rejected];
+        chart.update();
+    }
+}
+
+function viewDetail(penawaranId) {
+    window.location.href = '{{ route("tengkulak.detail-penawaran-approval", ":id") }}'.replace(':id', penawaranId);
+}
+
+function downloadInvoice(penawaranId) {
+    window.open('{{ route("tengkulak.generate-invoice", ":id") }}'.replace(':id', penawaranId));
+}
+</script>
 </script>
 @endsection

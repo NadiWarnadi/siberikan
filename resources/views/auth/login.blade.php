@@ -49,11 +49,8 @@
 
                 <div class="mt-3">
                     <small class="text-muted">
-                        <strong>Akun Demo:</strong><br>
-                        Nelayan: nelayan@siberikan.com / password<br>
-                        Tengkulak: tengkulak@siberikan.com / password<br>
-                        Sopir: sopir@siberikan.com / password<br>
-                        Pembeli: pembeli@siberikan.com / password
+                        <strong>web si percobaan warnadi</strong><br>
+                        
                     </small>
                 </div>
             </div>

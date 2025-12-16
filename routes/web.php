@@ -81,8 +81,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/dashboard/pembeli/retur', [PembeliController::class, 'submitRetur'])->name('pembeli.retur');
     });
 
-    // Admin User Management
-    Route::middleware('role:admin')->group(function () {
+    // Admin User Management - Tengkulak is the owner/highest role
+    Route::middleware('role:admin|tengkulak')->group(function () {
         Route::get('/admin/users', [\App\Http\Controllers\AdminUserController::class, 'index'])->name('admin.users.index');
         Route::get('/admin/users/create', [\App\Http\Controllers\AdminUserController::class, 'showCreateForm'])->name('admin.users.create');
         Route::post('/admin/users', [\App\Http\Controllers\AdminUserController::class, 'store'])->name('admin.users.store');
@@ -94,8 +94,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/admin/users-stats', [\App\Http\Controllers\AdminUserController::class, 'getUserStats'])->name('admin.users.stats');
     });
 
-    // Admin Delivery Management
-    Route::middleware('role:admin|staff|owner')->group(function () {
+    // Admin Delivery Management - Tengkulak is the owner/highest role
+    Route::middleware('role:admin|staff|owner|tengkulak')->group(function () {
         Route::get('/admin/deliveries', [\App\Http\Controllers\DeliveryManagementController::class, 'index'])->name('admin.deliveries.index');
         Route::get('/admin/deliveries/{id}', [\App\Http\Controllers\DeliveryManagementController::class, 'show'])->name('admin.deliveries.show');
         Route::post('/admin/deliveries/{id}/assign-sopir', [\App\Http\Controllers\DeliveryManagementController::class, 'assignSopir'])->name('admin.deliveries.assign-sopir');
