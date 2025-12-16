@@ -31,6 +31,46 @@ class TengkulakApprovalController extends Controller
             return response()->json($stats);
         }
 
+        // Penawaran pending dari nelayan
+        $penawaranPending = Penawaran::with(['nelayan', 'jenisIkan'])
+            ->where('status', 'pending')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Penawaran approved (siap dijual ke pembeli)
+        $queryApproved = Penawaran::with(['nelayan', 'jenisIkan'])
+            ->where('status', 'approved');
+
+        // Filter
+        if ($request->has('search') && $request->search != '') {
+            $search = $request->search;
+            $queryApproved->whereHas('jenisIkan', function($q) use ($search) {
+                $q->where('nama_ikan', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->has('kualitas') && $request->kualitas != '') {
+            $queryApproved->where('kualitas', $request->kualitas);
+        }
+
+        $penawaranApproved = $queryApproved->orderBy('created_at', 'desc')->paginate(10);
+
+        // Transaksi yang dikelola tengkulak
+        $transaksi = \App\Models\Transaksi::with(['pembeli', 'details.hasilTangkapan.jenisIkan'])
+            ->where('tengkulak_id', Auth::id())
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        // Pengiriman
+        $pengiriman = \App\Models\Pengiriman::with(['transaksi', 'sopir'])
+            ->whereHas('transaksi', function($q) {
+                $q->where('tengkulak_id', Auth::id());
+            })
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
         // Get stats
         $stats = [
             'pending' => Penawaran::where('status', 'pending')->count(),
@@ -39,7 +79,7 @@ class TengkulakApprovalController extends Controller
             'total' => Penawaran::count(),
         ];
 
-        return view('dashboard.tengkulak.dashboard', compact('stats'));
+        return view('dashboard.tengkulak', compact('penawaranPending', 'penawaranApproved', 'transaksi', 'pengiriman', 'stats'));
     }
 
     /**
@@ -116,12 +156,21 @@ class TengkulakApprovalController extends Controller
 
         $penawaran = Penawaran::findOrFail($id);
 
+        // Security: Verify user is authorized to approve
+        if (Auth::user()->peran !== 'tengkulak') {
+            abort(403, 'Unauthorized to approve penawaran');
+        }
+
         if ($penawaran->status != 'pending') {
             return response()->json(['error' => 'Penawaran ini sudah diproses'], 400);
         }
 
         try {
             DB::beginTransaction();
+
+            // Lock and reload to prevent race condition
+            $penawaran = Penawaran::lockForUpdate()
+                ->findOrFail($id);
 
             // Update penawaran status
             $penawaran->update([
@@ -130,18 +179,36 @@ class TengkulakApprovalController extends Controller
                 'approved_at' => now(),
             ]);
 
+            // Map kualitas to grade (A/B/C) with validation
+            $qualityMap = [
+                'premium' => 'A',
+                'standar' => 'B',
+                'ekonomi' => 'C',
+            ];
+            
+            $quality = strtolower(trim($penawaran->kualitas ?? 'standar'));
+            $grade = $qualityMap[$quality] ?? 'B';
+
+            // Validate grade is in allowed enum
+            $allowedGrades = ['A', 'B', 'C'];
+            if (!in_array($grade, $allowedGrades)) {
+                throw new \Exception("Invalid grade value: {$grade}");
+            }
+
             // Create hasil tangkapan dari penawaran yang approved
             $hasilTangkapan = HasilTangkapan::create([
                 'nelayan_id' => $penawaran->nelayan_id,
                 'penawaran_id' => $penawaran->id,
                 'jenis_ikan_id' => $penawaran->jenis_ikan_id,
-                'berat' => $penawaran->jumlah_kg,
-                'grade' => $penawaran->kualitas,
-                'harga_per_kg' => $penawaran->harga_per_kg,
+                'berat' => (float) $penawaran->jumlah_kg,
+                'grade' => $grade,
+                'harga_per_kg' => (float) $penawaran->harga_per_kg,
                 'tanggal_tangkap' => $penawaran->tanggal_tangkapan,
                 'status' => 'tersedia',
-                'catatan' => $penawaran->catatan,
-                'foto_ikan' => $penawaran->foto_ikan,
+                'catatan' => htmlspecialchars($penawaran->catatan ?? '', ENT_QUOTES, 'UTF-8'),
+                'foto_ikan' => $penawaran->foto_ikan ? 'storage/' . $penawaran->foto_ikan : null,
+                'lokasi_tangkapan' => htmlspecialchars($penawaran->lokasi_tangkapan ?? '', ENT_QUOTES, 'UTF-8'),
+                'kedalaman' => (int) ($penawaran->kedalaman ?? 0),
             ]);
 
             DB::commit();

@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\HasilTangkapan;
+use App\Models\Penawaran;
 use App\Models\MasterJenisIkan;
 
 class NelayanController extends Controller
 {
     public function index(Request $request)
     {
+        // Get hasil tangkapan
         $query = HasilTangkapan::with(['jenisIkan'])
             ->where('nelayan_id', Auth::id());
 
@@ -31,9 +33,25 @@ class NelayanController extends Controller
         }
 
         $hasilTangkapan = $query->orderBy('created_at', 'desc')->paginate(10);
+        
+        // Get penawaran recent
+        $penawaranRecent = Penawaran::with(['jenisIkan'])
+            ->where('nelayan_id', Auth::id())
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
+
+        // Get penawaran stats
+        $penawaranStats = [
+            'pending' => Penawaran::where('nelayan_id', Auth::id())->where('status', 'pending')->count(),
+            'approved' => Penawaran::where('nelayan_id', Auth::id())->where('status', 'approved')->count(),
+            'rejected' => Penawaran::where('nelayan_id', Auth::id())->where('status', 'rejected')->count(),
+            'total' => Penawaran::where('nelayan_id', Auth::id())->count(),
+        ];
+        
         $jenisIkan = MasterJenisIkan::all();
 
-        return view('dashboard.nelayan', compact('hasilTangkapan', 'jenisIkan'));
+        return view('dashboard.nelayan', compact('hasilTangkapan', 'penawaranRecent', 'penawaranStats', 'jenisIkan'));
     }
 
     public function store(Request $request)

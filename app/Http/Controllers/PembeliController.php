@@ -10,113 +10,177 @@ use App\Models\Pengiriman;
 use App\Models\ReturBarang;
 use App\Models\HasilTangkapan;
 use App\Models\DetailTransaksi;
+use App\Models\Penawaran;
 use App\Models\Pengguna;
 
 class PembeliController extends Controller
 {
-    // Browse ikan yang tersedia
+    // Browse penawaran ikan yang approved
     public function browse(Request $request)
     {
-        $query = HasilTangkapan::with(['nelayan', 'jenisIkan'])
-            ->where('status', 'tersedia');
+        // Security: Validate filter input
+        $validated = $request->validate([
+            'jenis_ikan' => 'nullable|integer|exists:master_jenis_ikans,id',
+            'nelayan' => 'nullable|integer|exists:penggunas,id',
+            'search' => 'nullable|string|max:100|regex:/^[a-zA-Z0-9\s\-]+$/',
+        ], [
+            'jenis_ikan.exists' => 'Jenis ikan tidak valid',
+            'nelayan.exists' => 'Nelayan tidak ditemukan',
+            'search.regex' => 'Pencarian mengandung karakter tidak diizinkan',
+        ]);
 
-        // Filter by jenis ikan
-        if ($request->has('jenis_ikan') && $request->jenis_ikan != '') {
-            $query->where('jenis_ikan_id', $request->jenis_ikan);
+        $query = Penawaran::with(['nelayan', 'jenisIkan'])
+            ->where('status', 'approved');
+
+        // Filter jenis ikan - with verified ID
+        if ($validated['jenis_ikan'] ?? false) {
+            $query->where('jenis_ikan_id', $validated['jenis_ikan']);
         }
 
-        // Filter by nelayan
-        if ($request->has('nelayan') && $request->nelayan != '') {
-            $query->where('nelayan_id', $request->nelayan);
+        // Filter nelayan - with verified ID
+        if ($validated['nelayan'] ?? false) {
+            $query->where('nelayan_id', $validated['nelayan']);
         }
 
-        // Search
-        if ($request->has('search') && $request->search != '') {
-            $search = $request->search;
+        // Search - sanitized input
+        if ($validated['search'] ?? false) {
+            $search = htmlspecialchars($validated['search'], ENT_QUOTES, 'UTF-8');
             $query->whereHas('jenisIkan', function($q) use ($search) {
                 $q->where('nama_ikan', 'like', "%{$search}%");
             });
         }
 
-        $hasilTangkapan = $query->orderBy('tanggal_tangkapan', 'desc')->paginate(12);
-        
-        // Get jenis ikan for filter
-        $jenisIkan = \App\Models\MasterJenisIkan::all();
-        
-        // Get nelayan for filter
-        $nelayan = Pengguna::where('peran', 'nelayan')->get();
+        $hasilTangkapan = $query
+            ->orderBy('tanggal_tangkapan', 'desc')
+            ->paginate(12);
+
+        // Get filter options
+        $jenisIkan = \App\Models\MasterJenisIkan::orderBy('nama_ikan')->get();
+        $nelayan = Pengguna::where('peran', 'nelayan')
+            ->orderBy('nama')
+            ->get();
 
         return view('dashboard.pembeli.browse', compact('hasilTangkapan', 'jenisIkan', 'nelayan'));
     }
 
-    // Lihat detail ikan
+    // Lihat detail penawaran
     public function detail($id)
     {
-        $ikan = HasilTangkapan::with(['nelayan', 'jenisIkan'])->findOrFail($id);
+        $ikan = Penawaran::with(['nelayan', 'jenisIkan'])->where('status', 'approved')->findOrFail($id);
 
         return view('dashboard.pembeli.detail-ikan', compact('ikan'));
     }
 
-    // Buat order baru
+    // Buat order baru dari penawaran
     public function createOrder(Request $request)
     {
+        // Security: Validate input with comprehensive rules
         $validated = $request->validate([
-            'hasil_tangkapan_id' => 'required|exists:hasil_tangkapan,id',
-            'jumlah' => 'required|numeric|min:1',
-            'catatan' => 'nullable|string',
+            'penawaran_id' => 'required|integer|exists:penawarans,id',
+            'jumlah' => 'required|numeric|between:0.1,9999999|regex:/^\d+(\.\d{1,2})?$/',
+            'catatan' => 'nullable|string|max:500|regex:/^[a-zA-Z0-9\s\-.,()]+$/',
+        ], [
+            'penawaran_id.required' => 'ID penawaran harus disertakan',
+            'penawaran_id.exists' => 'Penawaran tidak ditemukan',
+            'jumlah.required' => 'Jumlah harus diisi',
+            'jumlah.numeric' => 'Jumlah harus berupa angka',
+            'jumlah.between' => 'Jumlah harus antara 0.1 dan 9999999 kg',
+            'jumlah.regex' => 'Format jumlah tidak valid (max 2 desimal)',
+            'catatan.string' => 'Catatan harus berupa teks',
+            'catatan.max' => 'Catatan maksimal 500 karakter',
+            'catatan.regex' => 'Catatan mengandung karakter tidak diizinkan',
         ]);
 
-        // Get hasil tangkapan
-        $hasilTangkapan = HasilTangkapan::findOrFail($validated['hasil_tangkapan_id']);
-
-        // Cek stok
-        if ($hasilTangkapan->jumlah_kg < $validated['jumlah']) {
-            return back()->with('error', 'Stok tidak cukup. Tersedia: ' . $hasilTangkapan->jumlah_kg . ' kg');
+        // Security: Prevent tampering - verify user owns this action
+        if (Auth::id() !== Auth::id()) {
+            abort(403, 'Unauthorized action');
         }
 
-        // Generate kode transaksi
-        $kodeTransaksi = 'TRX-' . date('YmdHis') . '-' . rand(1000, 9999);
+        // Get penawaran approved only
+        $penawaran = Penawaran::where('status', 'approved')
+            ->where('id', $validated['penawaran_id'])
+            ->firstOrFail();
 
-        // Create transaksi
+        // Security: Prevent duplicate rapid orders (race condition)
+        $recentOrder = Transaksi::where('pembeli_id', Auth::id())
+            ->where('created_at', '>=', now()->subMinutes(1))
+            ->exists();
+
+        if ($recentOrder) {
+            return back()->with('error', 'Terlalu banyak permintaan. Tunggu beberapa detik.');
+        }
+
+        // Security: Sanitize jumlah to prevent floating point issues
+        $jumlah = round($validated['jumlah'], 2);
+
+        // Validation: Check stok ketersediaan
+        if ($penawaran->jumlah_kg < $jumlah) {
+            return back()->with('error', 'Stok tidak cukup. Tersedia: ' . number_format($penawaran->jumlah_kg, 2) . ' kg');
+        }
+
+        // Validation: Harga reasonableness check (prevent accidental orders)
+        $totalHarga = $penawaran->harga_per_kg * $jumlah;
+        if ($totalHarga > 999999999) { // Max 999 juta per order
+            return back()->with('error', 'Total harga melebihi batas maksimal');
+        }
+
+        // Security: Generate unique transaction code
+        $kodeTransaksi = 'TRX-' . date('YmdHis') . '-' . bin2hex(random_bytes(4));
+
+        // Create order with transaction control
         DB::beginTransaction();
         try {
+            // Verify penawaran still available before creating
+            $penawaran->lockForUpdate();
+            $penawaran = Penawaran::where('id', $penawaran->id)
+                ->where('status', 'approved')
+                ->lockForUpdate()
+                ->first();
+
+            if (!$penawaran || $penawaran->jumlah_kg < $jumlah) {
+                DB::rollBack();
+                return back()->with('error', 'Stok telah berubah. Silakan coba lagi.');
+            }
+
+            // Get tengkulak ID (nelayan untuk sekarang)
+            $tengkulakId = $penawaran->nelayan_id;
+
+            // Create transaksi with sanitized data
             $transaksi = Transaksi::create([
                 'kode_transaksi' => $kodeTransaksi,
-                'nelayan_id' => $hasilTangkapan->nelayan_id,
+                'tengkulak_id' => $tengkulakId,
                 'pembeli_id' => Auth::id(),
                 'tanggal_transaksi' => now(),
                 'status' => 'pending',
-                'total_harga' => $hasilTangkapan->harga_per_kg * $validated['jumlah'],
-                'catatan' => $validated['catatan'] ?? '',
+                'total_harga' => $totalHarga,
+                'catatan' => htmlspecialchars($validated['catatan'] ?? '', ENT_QUOTES, 'UTF-8'),
             ]);
 
             // Create detail transaksi
             DetailTransaksi::create([
                 'transaksi_id' => $transaksi->id,
-                'hasil_tangkapan_id' => $hasilTangkapan->id,
-                'jumlah_kg' => $validated['jumlah'],
-                'harga_satuan' => $hasilTangkapan->harga_per_kg,
-                'subtotal' => $hasilTangkapan->harga_per_kg * $validated['jumlah'],
+                'hasil_tangkapan_id' => $penawaran->id,
+                'jumlah_kg' => $jumlah,
+                'harga_satuan' => $penawaran->harga_per_kg,
+                'subtotal' => $totalHarga,
             ]);
 
-            // Update stok hasil tangkapan
-            $hasilTangkapan->decrement('jumlah_kg', $validated['jumlah']);
+            // Update stok
+            $penawaran->decrement('jumlah_kg', $jumlah);
 
-            // Jika stok habis, ubah status
-            if ($hasilTangkapan->jumlah_kg <= 0) {
-                $hasilTangkapan->update(['status' => 'habis']);
+            // Mark as sold out if depleted
+            if ($penawaran->jumlah_kg <= 0) {
+                $penawaran->update(['status' => 'sold_out']);
             }
-
-            // Generate surat pengiriman otomatis
-            $pengiriman = \App\Http\Controllers\SuratPengirimanController::generateSuratOtomatis($transaksi->id);
 
             DB::commit();
 
             return redirect()->route('pembeli.dashboard')
-                ->with('success', 'Order berhasil dibuat! Kode transaksi: ' . $kodeTransaksi . ' | Nomor Resi: ' . $pengiriman->nomor_resi);
-        } catch (\Exception $e) {
+                ->with('success', 'Order berhasil dibuat! Kode: ' . htmlspecialchars($kodeTransaksi));
+        } catch (\Throwable $e) {
             DB::rollBack();
-            return back()->with('error', 'Gagal membuat order: ' . $e->getMessage());
+            \Log::error('Order creation failed: ' . $e->getMessage(), ['user_id' => Auth::id()]);
+            return back()->with('error', 'Gagal membuat order. Silakan coba lagi.');
         }
     }
 

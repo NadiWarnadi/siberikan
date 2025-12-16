@@ -29,7 +29,7 @@ class PenggunaSeeder extends Seeder
             // Tengkulak (2)
             [
                 'nama' => 'Siti Tengkulak',
-                'email' => 'tengkulak1@siberikan.com',
+                'email' => 'tengkulak@siberikan.com',
                 'password' => Hash::make('password123'),
                 'peran' => 'tengkulak',
                 'alamat' => 'Pasar Ikan Modern, Jakarta Utara',

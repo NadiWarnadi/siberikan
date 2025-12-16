@@ -3,315 +3,428 @@
 @section('title', 'Dashboard Tengkulak')
 
 @section('content')
-<div class="row">
-    <div class="col-12">
-        <div class="page-header">
-            <h2><i class="bi bi-shop"></i> Dashboard Tengkulak</h2>
-            <p class="text-muted mb-0">Kelola stok ikan, transaksi, dan pengiriman</p>
-        </div>
-    </div>
-</div>
+<style>
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .stat-card.pending {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    
+    .stat-card.approved {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .stat-card.transaksi {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+    
+    .stat-label {
+        font-size: 0.95rem;
+        opacity: 0.9;
+    }
 
-<!-- Quick Actions Menu untuk Tengkulak (Admin) -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card bg-light">
-            <div class="card-header bg-primary text-white">
-                <i class="bi bi-lightning"></i> Menu Manajemen
-            </div>
-            <div class="card-body">
-                <div class="row g-2">
-                    <div class="col-md-3">
-                        <a href="{{ route('admin.users.index') }}" class="btn btn-outline-primary w-100 py-3">
-                            <i class="bi bi-people"></i>
-                            <div class="small mt-2">Manajemen Pengguna</div>
-                        </a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="{{ route('admin.deliveries.index') }}" class="btn btn-outline-info w-100 py-3">
-                            <i class="bi bi-truck"></i>
-                            <div class="small mt-2">Manajemen Pengiriman</div>
-                        </a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="{{ route('penawaran.index') }}" class="btn btn-outline-success w-100 py-3">
-                            <i class="bi bi-box-seam"></i>
-                            <div class="small mt-2">Data Penawaran</div>
-                        </a>
-                    </div>
-                    <div class="col-md-3">
-                        <a href="#" class="btn btn-outline-warning w-100 py-3" onclick="alert('Laporan - segera hadir'); return false;">
-                            <i class="bi bi-file-earmark-pdf"></i>
-                            <div class="small mt-2">Laporan</div>
-                        </a>
-                    </div>
+    .penawaran-card {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        transition: all 0.3s;
+        margin-bottom: 15px;
+        border-left: 4px solid #667eea;
+    }
+
+    .penawaran-card:hover {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+
+    .penawaran-header {
+        padding: 15px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .penawaran-code {
+        font-weight: 700;
+        color: #667eea;
+        font-size: 1rem;
+    }
+
+    .penawaran-status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .status-pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .status-approved {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .penawaran-body {
+        padding: 15px;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 15px;
+    }
+
+    .info-item {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .info-label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-bottom: 3px;
+    }
+
+    .info-value {
+        font-weight: 600;
+        color: #212529;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+        margin-top: 15px;
+        padding-top: 15px;
+        border-top: 1px solid #e9ecef;
+    }
+
+    .action-buttons .btn {
+        flex: 1;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        color: #6c757d;
+    }
+
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 15px;
+        opacity: 0.5;
+    }
+</style>
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-2"><i class="bi bi-shop"></i> Dashboard Tengkulak</h2>
+                    <p class="text-muted mb-0">Kelola penawaran ikan dari nelayan & transaksi pembeli</p>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Filter Stock -->
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-box-seam"></i> Stok Ikan Tersedia
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card pending">
+                <div class="stat-icon"><i class="bi bi-hourglass-split" style="font-size: 1.5rem;"></i></div>
+                <div class="stat-number">{{ count($penawaranPending) }}</div>
+                <div class="stat-label">Penawaran Menunggu</div>
             </div>
-            <div class="card-body">
-                <form method="GET" action="{{ route('tengkulak.dashboard') }}" class="mb-3">
-                    <div class="row g-2">
-                        <div class="col-md-5">
-                            <input type="text" name="search" class="form-control" 
-                                   placeholder="Cari nama ikan..." value="{{ request('search') }}">
-                        </div>
-                        <div class="col-md-3">
-                            <select name="grade" class="form-select">
-                                <option value="">Semua Grade</option>
-                                <option value="A" {{ request('grade') == 'A' ? 'selected' : '' }}>Grade A</option>
-                                <option value="B" {{ request('grade') == 'B' ? 'selected' : '' }}>Grade B</option>
-                                <option value="C" {{ request('grade') == 'C' ? 'selected' : '' }}>Grade C</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <button type="submit" class="btn btn-info w-100">
-                                <i class="bi bi-search"></i> Filter
-                            </button>
-                        </div>
-                        <div class="col-md-2">
-                            <a href="{{ route('tengkulak.dashboard') }}" class="btn btn-secondary w-100">
-                                <i class="bi bi-arrow-clockwise"></i> Reset
-                            </a>
-                        </div>
-                    </div>
-                </form>
-
-                <div class="table-responsive">
-                    <table class="table table-hover table-striped">
-                        <thead class="table-light">
-                            <tr>
-                                <th>No</th>
-                                <th>Nelayan</th>
-                                <th>Jenis Ikan</th>
-                                <th>Berat (Kg)</th>
-                                <th>Grade</th>
-                                <th>Harga/Kg</th>
-                                <th>Total</th>
-                                <th>Tanggal Tangkap</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($stokTersedia as $index => $stok)
-                            <tr>
-                                <td>{{ $stokTersedia->firstItem() + $index }}</td>
-                                <td>{{ $stok->nelayan->nama }}</td>
-                                <td><strong>{{ $stok->jenisIkan->nama_ikan }}</strong></td>
-                                <td>{{ number_format($stok->berat, 2) }}</td>
-                                <td><span class="badge bg-info">{{ $stok->grade }}</span></td>
-                                <td>Rp {{ number_format($stok->harga_per_kg, 0, ',', '.') }}</td>
-                                <td><strong>Rp {{ number_format($stok->berat * $stok->harga_per_kg, 0, ',', '.') }}</strong></td>
-                                <td>{{ $stok->tanggal_tangkap->format('d/m/Y') }}</td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="8" class="text-center py-4">
-                                    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
-                                    <p class="text-muted mt-2">Tidak ada stok tersedia saat ini</p>
-                                </td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-
-                @if($stokTersedia->hasPages())
-                <div class="mt-3">
-                    {{ $stokTersedia->links() }}
-                </div>
-                @endif
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card approved">
+                <div class="stat-icon"><i class="bi bi-check-circle" style="font-size: 1.5rem;"></i></div>
+                <div class="stat-number">{{ $penawaranApproved->total() }}</div>
+                <div class="stat-label">Penawaran Approved</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card transaksi">
+                <div class="stat-icon"><i class="bi bi-bag-check" style="font-size: 1.5rem;"></i></div>
+                <div class="stat-number">{{ count($transaksi) }}</div>
+                <div class="stat-label">Transaksi Pembeli</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="bi bi-truck" style="font-size: 1.5rem;"></i></div>
+                <div class="stat-number">{{ count($pengiriman) }}</div>
+                <div class="stat-label">Pengiriman</div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Transactions -->
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-receipt"></i> Transaksi Terbaru
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Kode Transaksi</th>
-                                <th>Pembeli</th>
-                                <th>Tanggal</th>
-                                <th>Total</th>
-                                <th>Status</th>
-                                <th>Detail</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($transaksi as $trx)
-                            <tr>
-                                <td><strong>{{ $trx->kode_transaksi }}</strong></td>
-                                <td>{{ $trx->pembeli->nama }}</td>
-                                <td>{{ $trx->tanggal_transaksi->format('d/m/Y') }}</td>
-                                <td><strong>Rp {{ number_format($trx->total_harga, 0, ',', '.') }}</strong></td>
-                                <td>
-                                    @if($trx->status == 'pending')
-                                        <span class="badge bg-warning">Pending</span>
-                                    @elseif($trx->status == 'dikemas')
-                                        <span class="badge bg-info">Dikemas</span>
-                                    @elseif($trx->status == 'dikirim')
-                                        <span class="badge bg-primary">Dikirim</span>
-                                    @elseif($trx->status == 'selesai')
-                                        <span class="badge bg-success">Selesai</span>
-                                    @else
-                                        <span class="badge bg-danger">Dibatalkan</span>
-                                    @endif
-                                </td>
-                                <td>
-                                    <button class="btn btn-sm btn-info" data-bs-toggle="modal" 
-                                            data-bs-target="#detailModal{{ $trx->id }}">
-                                        <i class="bi bi-eye"></i> Lihat
-                                    </button>
-                                </td>
-                            </tr>
-
-                            <!-- Detail Modal -->
-                            <div class="modal fade" id="detailModal{{ $trx->id }}" tabindex="-1">
-                                <div class="modal-dialog modal-lg">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title">Detail Transaksi {{ $trx->kode_transaksi }}</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <!-- Penawaran Pending Approval -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-hourglass-split"></i> Penawaran Menunggu Persetujuan</h5>
+                </div>
+                <div class="card-body">
+                    @if(count($penawaranPending) > 0)
+                        <div class="row">
+                            @foreach($penawaranPending as $penawaran)
+                            <div class="col-md-6">
+                                <div class="penawaran-card">
+                                    <div class="penawaran-header">
+                                        <div>
+                                            <div class="penawaran-code">{{ $penawaran->kode_penawaran }}</div>
+                                            <small class="text-muted">{{ $penawaran->nelayan->nama }}</small>
                                         </div>
-                                        <div class="modal-body">
-                                            <h6>Informasi Transaksi</h6>
-                                            <table class="table table-sm">
-                                                <tr>
-                                                    <td width="150">Kode</td>
-                                                    <td><strong>{{ $trx->kode_transaksi }}</strong></td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Pembeli</td>
-                                                    <td>{{ $trx->pembeli->nama }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Tanggal</td>
-                                                    <td>{{ $trx->tanggal_transaksi->format('d M Y') }}</td>
-                                                </tr>
-                                                <tr>
-                                                    <td>Status</td>
-                                                    <td>{{ ucfirst($trx->status) }}</td>
-                                                </tr>
-                                            </table>
-
-                                            <h6 class="mt-3">Detail Item</h6>
-                                            <table class="table table-bordered table-sm">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Ikan</th>
-                                                        <th>Jumlah (Kg)</th>
-                                                        <th>Harga/Kg</th>
-                                                        <th>Subtotal</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @foreach($trx->details as $detail)
-                                                    <tr>
-                                                        <td>{{ $detail->hasilTangkapan->jenisIkan->nama_ikan }}</td>
-                                                        <td>{{ number_format($detail->jumlah_kg, 2) }}</td>
-                                                        <td>Rp {{ number_format($detail->harga_satuan, 0, ',', '.') }}</td>
-                                                        <td>Rp {{ number_format($detail->subtotal, 0, ',', '.') }}</td>
-                                                    </tr>
-                                                    @endforeach
-                                                    <tr>
-                                                        <td colspan="3" class="text-end"><strong>Total</strong></td>
-                                                        <td><strong>Rp {{ number_format($trx->total_harga, 0, ',', '.') }}</strong></td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
+                                        <span class="penawaran-status status-pending">PENDING</span>
+                                    </div>
+                                    <div class="penawaran-body">
+                                        <div class="info-grid">
+                                            <div class="info-item">
+                                                <div class="info-label">Jenis Ikan</div>
+                                                <div class="info-value">{{ $penawaran->jenisIkan->nama_ikan ?? 'N/A' }}</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">Jumlah</div>
+                                                <div class="info-value">{{ number_format($penawaran->jumlah_kg, 2) }} kg</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">Harga/Kg</div>
+                                                <div class="info-value">Rp {{ number_format($penawaran->harga_per_kg, 0, ',', '.') }}</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">Kualitas</div>
+                                                <div class="info-value">{{ $penawaran->kualitas }}</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">Total Harga</div>
+                                                <div class="info-value">Rp {{ number_format($penawaran->jumlah_kg * $penawaran->harga_per_kg, 0, ',', '.') }}</div>
+                                            </div>
+                                            <div class="info-item">
+                                                <div class="info-label">Tanggal</div>
+                                                <div class="info-value">{{ $penawaran->tanggal_tangkapan->format('d M Y') }}</div>
+                                            </div>
                                         </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                                        <div class="action-buttons">
+                                            <a href="{{ route('tengkulak.detail-penawaran-approval', $penawaran->id) }}" class="btn btn-primary btn-sm">
+                                                <i class="bi bi-eye"></i> Lihat Detail & Approve
+                                            </a>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            @empty
-                            <tr>
-                                <td colspan="6" class="text-center py-4">
-                                    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
-                                    <p class="text-muted mt-2">Belum ada transaksi</p>
-                                </td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                            @endforeach
+                        </div>
+                    @else
+                        <div class="empty-state">
+                            <div class="empty-icon"><i class="bi bi-inbox"></i></div>
+                            <p>✓ Tidak ada penawaran menunggu persetujuan</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Penawaran Approved -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-check-circle"></i> Penawaran Sudah Disetujui (Siap Dijual ke Pembeli)</h5>
+                </div>
+                <div class="card-body">
+                    @if($penawaranApproved->count() > 0)
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Kode</th>
+                                        <th>Nelayan</th>
+                                        <th>Jenis Ikan</th>
+                                        <th>Stok (kg)</th>
+                                        <th>Harga/Kg</th>
+                                        <th>Total Value</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($penawaranApproved as $penawaran)
+                                    <tr>
+                                        <td><strong>{{ $penawaran->kode_penawaran }}</strong></td>
+                                        <td>{{ $penawaran->nelayan->nama }}</td>
+                                        <td>{{ $penawaran->jenisIkan->nama_ikan }}</td>
+                                        <td>
+                                            <span class="badge bg-info">{{ number_format($penawaran->jumlah_kg, 2) }} kg</span>
+                                        </td>
+                                        <td>Rp {{ number_format($penawaran->harga_per_kg, 0, ',', '.') }}</td>
+                                        <td><strong>Rp {{ number_format($penawaran->jumlah_kg * $penawaran->harga_per_kg, 0, ',', '.') }}</strong></td>
+                                        <td><span class="badge bg-success">Approved</span></td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                        @if($penawaranApproved->hasPages())
+                        <div class="mt-3">
+                            {{ $penawaranApproved->links() }}
+                        </div>
+                        @endif
+                    @else
+                        <div class="empty-state">
+                            <div class="empty-icon"><i class="bi bi-check-circle"></i></div>
+                            <p>Tidak ada penawaran yang sudah disetujui (belum ada yang approved)</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaksi Pembeli -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-bag-check"></i> Transaksi Pembeli (Pesanan Masuk)</h5>
+                </div>
+                <div class="card-body">
+                    @if(count($transaksi) > 0)
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Kode Transaksi</th>
+                                        <th>Pembeli</th>
+                                        <th>Tanggal</th>
+                                        <th>Total</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($transaksi as $trx)
+                                    <tr>
+                                        <td><strong>{{ $trx->kode_transaksi }}</strong></td>
+                                        <td>{{ $trx->pembeli->nama }}</td>
+                                        <td>{{ $trx->tanggal_transaksi->format('d/m/Y') }}</td>
+                                        <td><strong>Rp {{ number_format($trx->total_harga, 0, ',', '.') }}</strong></td>
+                                        <td>
+                                            @if($trx->status == 'pending')
+                                                <span class="badge bg-warning">Pending</span>
+                                            @elseif($trx->status == 'dikemas')
+                                                <span class="badge bg-info">Dikemas</span>
+                                            @elseif($trx->status == 'dikirim')
+                                                <span class="badge bg-primary">Dikirim</span>
+                                            @elseif($trx->status == 'selesai')
+                                                <span class="badge bg-success">Selesai</span>
+                                            @else
+                                                <span class="badge bg-danger">{{ ucfirst($trx->status) }}</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="empty-state">
+                            <div class="empty-icon"><i class="bi bi-bag"></i></div>
+                            <p>Tidak ada transaksi dari pembeli (belum ada yang order)</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pengiriman -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-truck"></i> Pengiriman</h5>
+                </div>
+                <div class="card-body">
+                    @if(count($pengiriman) > 0)
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Nomor Resi</th>
+                                        <th>Kode Transaksi</th>
+                                        <th>Sopir</th>
+                                        <th>Tgl Kirim</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($pengiriman as $kirim)
+                                    <tr>
+                                        <td><strong>{{ $kirim->nomor_resi ?? 'N/A' }}</strong></td>
+                                        <td>{{ $kirim->transaksi->kode_transaksi ?? 'N/A' }}</td>
+                                        <td>{{ $kirim->sopir->nama ?? 'N/A' }}</td>
+                                        <td>{{ $kirim->tanggal_kirim ? $kirim->tanggal_kirim->format('d/m/Y') : 'N/A' }}</td>
+                                        <td>
+                                            @if($kirim->status == 'menunggu')
+                                                <span class="badge bg-warning">Menunggu</span>
+                                            @elseif($kirim->status == 'dalam_perjalanan')
+                                                <span class="badge bg-info">Dalam Perjalanan</span>
+                                            @elseif($kirim->status == 'terkirim')
+                                                <span class="badge bg-success">Terkirim</span>
+                                            @else
+                                                <span class="badge bg-danger">{{ ucfirst($kirim->status) }}</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="empty-state">
+                            <div class="empty-icon"><i class="bi bi-truck"></i></div>
+                            <p>Tidak ada pengiriman</p>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Shipments -->
-<div class="row">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-truck"></i> Status Pengiriman
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
-                            <tr>
-                                <th>No. Resi</th>
-                                <th>Kode Transaksi</th>
-                                <th>Sopir</th>
-                                <th>Tujuan</th>
-                                <th>Tgl Kirim</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($pengiriman as $kirim)
-                            <tr>
-                                <td><strong>{{ $kirim->nomor_resi }}</strong></td>
-                                <td>{{ $kirim->transaksi->kode_transaksi }}</td>
-                                <td>{{ $kirim->sopir->nama }}</td>
-                                <td>{{ Str::limit($kirim->alamat_tujuan, 30) }}</td>
-                                <td>{{ $kirim->tanggal_kirim->format('d/m/Y') }}</td>
-                                <td>
-                                    @if($kirim->status == 'menunggu')
-                                        <span class="badge bg-secondary">Menunggu</span>
-                                    @elseif($kirim->status == 'dalam_perjalanan')
-                                        <span class="badge bg-primary">Dalam Perjalanan</span>
-                                    @elseif($kirim->status == 'terkirim')
-                                        <span class="badge bg-success">Terkirim</span>
-                                    @else
-                                        <span class="badge bg-danger">Gagal</span>
-                                    @endif
-                                </td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="6" class="text-center py-4">
-                                    <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
-                                    <p class="text-muted mt-2">Belum ada pengiriman</p>
-                                </td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 @endsection
